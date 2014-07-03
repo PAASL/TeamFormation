@@ -9,7 +9,7 @@
 # (Actual id number varies from season to season).
 my $dir = "";
 
-my $fulldata_name = "Eve36.B.xls";
+my $fulldata_name = "SummerSunday_2014.xls";
 ##NOTE: If PA residents have priority set to 1 you need a percentage allocation (zero not allowed)
 
 #########	PA Policy Setup Start #############
@@ -24,10 +24,10 @@ my $pa_percent_reqd = 30; #Percentage required for PA policy currently 36%
 my $ratings_file ="BCorrected.csv";
 
 # The number of teams we are trying to build
-my $am_teams = 0;
-my $dont_care_teams = 4;
+my $am_teams = 6;
+my $dont_care_teams = 6;
 my $pm_teams = 0;
-my $players_per_team = 20;
+my $players_per_team = 17;
 
 #B-Division MAX group Size
 my $max_group_size = 4;
@@ -236,9 +236,6 @@ if ($interactive) {
 }
 
 open(TEAMS, ">teaminfo.txt");
-#Jigz: For New Players
-open(NewPlayers, ">NewPlayersEmail.list");
-
 for (my $team = 1; $team <= $num_teams; $team++) {
     PrintTeamRoster(STDOUT, $team);
     PrintTeamRoster(TEAMS, $team);
@@ -253,10 +250,6 @@ PrintWaitingList(TEAMS);
 PrintTimePrefs();
 PrintEquipmentOrder(STDOUT);
 PrintEquipmentOrder(TEAMS);
-
-print NewPlayers "NEW PLAYER EMAIL:\n";
-PrintNewPlayers(NewPlayers);
-close(NewPlayers);
 close(TEAMS);
 
 
@@ -303,6 +296,12 @@ sub InteractiveMode() {
 	    PrintWaitingList(STDOUT);
 	} elsif ($cmd =~ m/^groups/) {
 	    VerifyGroups(1);
+	} elsif ($cmd =~ m/swap team (\d+) with (\d+)/) {
+		my $team1 = $1;
+		my $team2 = $2;
+  		#print "Try to swap teams $team1 with $team2\n";
+  	 	SwapTeamNumbers($team1, $team2);	
+		i#print "Complete Swap teams\n";
 	} elsif ($cmd =~ m/move (.*?) *to *(\d+)/) {
 	    my $name = $1;
 	    my $new_team = $2;
@@ -423,6 +422,40 @@ sub PrintAllTeamsInfo {
     }
 }
 
+#Jigz: SwapTeamNumbers, if required
+sub SwapTeamNumbers {
+	#print "SwapTeamNumbers Called\n";
+	my $team1 = shift;
+	my $team2 = shift;
+	my $tempTeamID = 99;
+	#print "$team1: moving\n";
+
+	my @pFirstTeam = PlayersOnTeam($team1);
+    	#Empty the first Team
+    	for (my $i = 0; $i <= $#pFirstTeam; $i++) {
+        	my $pid = $pFirstTeam[$i];
+		RemovePlayerFromTeam($pid, $team1);
+        	AddPlayerToTeam($pid,$tempTeamID);
+    	}	
+	#print "$team2: moving\n";
+	my @pSecondTeam = PlayersOnTeam($team2);
+    	#Move the Second team players to team one
+    	for (my $j=0; $j <= $#pSecondTeam; $j++) {
+		my $pid = $pSecondTeam[$j];
+		RemovePlayerFromTeam($pid, $team2);
+		AddPlayerToTeam($pid, $team1);
+   	 }
+	#print "$team1: adjust\n";
+	my @pTempTeam = PlayersOnTeam($tempTeamID);
+    	#Add the First team players to old team
+    	for (my $k; $k <= $#pTempTeam; $k++) {
+		my $pid = $pTempTeam[$k];
+		RemovePlayerFromTeam($pid, $tempTeamID);
+		AddPlayerToTeam($pid, $team2);
+    	}
+	print "Team $team1 is NOW $team2 && $team2 is NOW $team1\n";
+}
+
 sub FindPlayerByName {
     my $name = shift;
     for (my $pid = 0; $pid < $num_players; $pid++) {
@@ -450,14 +483,15 @@ my $name = "paasl.output";
 # my $name2 = "output/paasl.output.$date_str";
 GenerateOutput($name);
 # GenerateOutput($name2);
-
+#Jigz: create a file open for NewPlayersEmail.csv
+open(OUTFNEWPLAYERS, ">NewPlayersEmail.csv");
 GenerateWebTeamList("weblist.csv");
 GenerateCSV("rosters.csv",
 	    "RegistrationID,team,iscoord,FirstName,LastName,goalie,EMail,HomePhone,WorkPhone,shirt,socks",
 	    "RegistrationID,Team,Coordinator,First Name,Last Name,Gk,E-mail,Home Phone,Work Phone,Shirt,Socks",
 	    0);
 GenerateCSV("fulldata.csv", "team,ALL", "", 1);
-
+close(OUTFNEWPLAYERS);
 
 sub TeamForPlayer {
     my $pid = shift;
@@ -1118,7 +1152,6 @@ sub RewriteDumpFile {
 
 sub ReadPlayers {
     my $fname = shift;
-    print "FileName: $fname\n";
     my $tmp_name = $fname . ".converted_to_csv";
     if ($fname =~ m/.*csv/i){
 	printf "THIS IS A CSV file\n";
@@ -1456,20 +1489,6 @@ sub ShirtString {
     return ShirtStringForCode($code);
 }
 
-#Jigz: Subroutine to print NEW PLAYERS for pass photo email
-sub PrintNewPlayers {
-	for (my $team = 1; $team <= $num_teams; $team++) {
-        	my @p = PlayersOnTeam($team);
-        	foreach $pid (@p) {
-            		my $shirt = ShirtString($pid);
-            		if ($shirt ne "None") {
-                		#Jigz: Check for ordered Shirt == New Player
-                		my $playerEmail = Email($pid);
-                		print NewPlayers "$playerEmail,";
-			}
-		}
-	}
-}
 sub PrintEquipmentOrder {
     my $file = shift;
     my %order = ();
@@ -1487,9 +1506,6 @@ sub PrintEquipmentOrder {
 	foreach $pid (@p) {
 	    my $shirt = ShirtString($pid);
 	    if ($shirt ne "None") {
-		#Jigz: Check for ordered Shirt == New Player
-        	#my $playerEmail = Email($pid);
-        	#print NewPlayers "$playerEmail: $shirt\n";
 		$order{$shirt}++;
 	    }
 	    $order{"socks"} += Quantity($pid, "Socks");
@@ -1652,48 +1668,35 @@ sub SkillFromRatingsFile {
     return $result;
 }
 
-#Original Subroutine
-#sub CorrectedSkill { 
-#    my $pid = shift;   
-#    my $name = Name($pid);
-#    my $s = ReportedSkill($pid);
-#
-#    my $cs = SkillFromRatingsFile($pid);
-#    if (defined($cs)) {
-#	return $cs;
-#    }
-#    # Give up: return their reported skill, adjusted for division
-#    my $adjust = 0;
-#    if (Division($pid) eq "B") {
-#	$adjust = $skill_adjustment_for_b_players;
-#    }
-#    return min(5, max(1, ReportedSkill($pid) + $adjust));
-#}
-#Jigz: Correct SubRoutine to change any player less then 35 to be at least RATED=3
 sub CorrectedSkill { 
     my $pid = shift;
+    
     my $name = Name($pid);
     #Jigz Checking if age
     my $age = Age($pid);
-    #print "NAME: $name  AGE: $age\n";
+    #print "NAME: $name  AGE: $age";
     my $s = ReportedSkill($pid);
 
     my $cs = SkillFromRatingsFile($pid);
     if (defined($cs)) {
-        return $cs;
+	return $cs;
     }
-    # Give up: return their reported skill, adjusted for division^M
+    # Give up: return their reported skill, adjusted for division
     my $adjust = 0;
     if (Division($pid) eq "B") {
-        $adjust = $skill_adjustment_for_b_players;
+	$adjust = $skill_adjustment_for_b_players;
     }
     #Jigz: Check age of player; if < 35 then rating is min 3
     if ($age < 35){
-        if (ReportedSkill($pid) > 3) {
-		#print "Updated Skill from $s to 3\n";
-                return 3;
-        }
-        return min(5, max(1, ReportedSkill($pid)+$adjust));
+    	if ($age < 30){
+    		if (ReportedSkill($pid) >2){
+    			return 2;
+    		}
+    	}
+    	if (ReportedSkill($pid) > 3) {
+       		return 3;
+	}
+	return min(5, max(1, ReportedSkill($pid)+$adjust));
     }
     return min(5, max(1, ReportedSkill($pid) + $adjust));
 }
@@ -1809,6 +1812,8 @@ sub CSVString {
 sub GenerateCSVForPlayer {
     my $pid = shift;
     my @fields = split(/;/, shift);
+    my $newPlayerFile = shift;
+    #print $newPlayerFile "Jigz File Handle: $newPlayerFile\n";
     for (my $j = 0; $j <= $#fields; $j++) {
 	if ($j != 0) {
 	    print OUTF ",";
@@ -1828,16 +1833,16 @@ sub GenerateCSVForPlayer {
 	    $s = GoalieString($pid);
 	} elsif ($fields[$j] eq "shirt") {
 	    $s = ShirtString($pid);
-	    #Jigz: Adding for NEW PLAYER Pass email
+     	    #Jigz: Printing to the NEWPlayerLists file
 	    if ($s ne "None") {
-   	   	
+		my $emailID = Email($pid);
+		print $newPlayerFile "$emailID,";
 	    }
 	} elsif ($fields[$j] eq "socks") {
 	    $s = SocksString($pid);
 	} else {
 	    $s = F($pid, $fields[$j]);
 	}
-	
 	print OUTF CSVString($s);
     }
     print OUTF "\n";
@@ -1874,13 +1879,17 @@ sub GenerateCSV {
     my @headers = split(/,/, $header_list);
     die if ($#fields != $#headers);
     open(OUTF, ">$fname");
+    #Jigz: Generate a NEW PLAYERS list to send email for photo/pass creation
+    #open(OUTFNEWPLAYERS, ">NewPlayers.csv");
+    #print OUTFNEWPLAYERS "JigzTest ";
     print OUTF "$field_list\n";
     
     for (my $team = 1; $team <= $num_teams; $team++) {
 	my @p = PlayersOnTeam($team);
 	for (my $i = 0; $i <= $#p; $i++) {
 	    my $pid = $p[$i];
-	    GenerateCSVForPlayer($pid, join(';', @fields));
+	    #GenerateCSVForPlayer($pid, join(';', @fields));
+	    GenerateCSVForPlayer($pid, join(';', @fields),OUTFNEWPLAYERS);
 	}
     }
     if ($show_unassigned) {
@@ -1896,6 +1905,7 @@ sub GenerateCSV {
 	    GenerateCSVForPlayer($plist[$i], join(';', @fields));
 	}
     }
+    #close(OUTFNEWPLAYERS);
     close(OUTF);
 }
 
