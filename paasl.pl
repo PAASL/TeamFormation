@@ -1689,14 +1689,14 @@ sub CorrectedSkill {
     #Jigz: Check age of player; if < 35 then rating is min 3
     if ($age < 35){
     	if ($age < 30){
-    		if (ReportedSkill($pid) >2){
+    		if (ReportedSkill($pid) > 2){
     			return 2;
     		}
     	}
     	if (ReportedSkill($pid) > 3) {
        		return 3;
-	}
-	return min(5, max(1, ReportedSkill($pid)+$adjust));
+		}
+		return min(5, max(1, ReportedSkill($pid)+$adjust));
     }
     return min(5, max(1, ReportedSkill($pid) + $adjust));
 }
